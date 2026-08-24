@@ -74,6 +74,26 @@ printed by the create scenario:
 ./scripts/run_drop_scenario.sh cache-create-1234567890
 ```
 
+### Repeated runs and logs
+
+Run all five scenarios ten times and save their outputs locally:
+
+```sh
+python3 scripts/run_repeated_scenarios.py
+```
+
+The runner writes one log per scenario/iteration and `summary.tsv` to
+`test-runs/<timestamp>/`. It checks the expected observer results and exits
+nonzero if any run fails. Pass a count and an output directory to override the
+defaults:
+
+```sh
+python3 scripts/run_repeated_scenarios.py 5 /tmp/lancedb-session-runs
+```
+
+`test-runs/` is ignored by Git so logs stay local unless you explicitly choose
+to share them.
+
 ## Observed result
 
 On the configured Ceph RGW/S3 backend, no staleness was observed in the five
