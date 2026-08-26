@@ -21,6 +21,7 @@ constexpr int kDeleteFirstId = 0;
 constexpr int kDeleteLastId = 4;
 constexpr size_t kIndexedSeedVectorCount = 256;
 constexpr int kNearestIdToDelete = 0;
+constexpr size_t kWarmupQueryCount = 10;
 
 fs::path observer_ready_path(const Args& args) {
   return fs::path(args.state_dir) / "observer-ready";
@@ -28,6 +29,25 @@ fs::path observer_ready_path(const Args& args) {
 
 fs::path writer_done_path(const Args& args) {
   return fs::path(args.state_dir) / "writer-done";
+}
+
+struct CacheStatsDelta {
+  int64_t hits_delta;
+  int64_t misses_delta;
+};
+
+const std::pair<CacheStatsDelta, CacheStatsDelta> compute_cache_delta(const CacheStats& updated,
+                                                                      const CacheStats& initial) {
+  CacheStatsDelta index_diff{};
+  CacheStatsDelta metadata_diff{};
+
+  index_diff.hits_delta = updated.index.hits - initial.index.hits;
+  index_diff.misses_delta = updated.index.misses - initial.index.misses;
+
+  metadata_diff.hits_delta = updated.metadata.hits - initial.metadata.hits;
+  metadata_diff.misses_delta = updated.metadata.misses - initial.metadata.misses;
+
+  return {index_diff, metadata_diff};
 }
 
 void write_signal(const fs::path& path) {
@@ -103,20 +123,54 @@ void run_nearest_id_observer(const Args& args) {
   fs::remove(observer_ready_path(args));
   fs::remove(writer_done_path(args));
 
-  const int initial_id = nearest_vector_id(client, args.table);
-  const CacheStats initial_stats = cache_stats(client);
+  const CacheStats stats_before_warmup = cache_stats(client);
+  print_cache_stats("observer: cache stats before warmup", stats_before_warmup);
 
-  std::cout << "observer: initial nearest id: " << initial_id << '\n';
-  print_cache_stats("observer: after initial nearest query", initial_stats);
+  std::cout << "observer: warming up cache by repeating the same nearest query for " << kWarmupQueryCount
+            << " times." << std::endl;
+  for (size_t i = 0; i < kWarmupQueryCount; i++) {
+    const int initial_id = nearest_vector_id(client, args.table);
+    if (initial_id != 0) {
+      throw std::runtime_error("observer:  warm-up query returned unexpected nearest id: " +
+                               std::to_string(initial_id));
+    }
+  }
+
+  const CacheStats stats_after_warmup = cache_stats(client);
+  print_cache_stats("observer: cache stats post-warmup", stats_after_warmup);
+
+  std::cout << "observer: cache stats delta after warm-up; checking for warm cache " << std::endl;
+  auto [index_delta, metadata_delta] = compute_cache_delta(stats_after_warmup, stats_before_warmup);
+
+  if (index_delta.hits_delta == 0) {
+    throw std::runtime_error("warm-up queries did not produce index cache hits !!!! ");
+  }
+
+  std::cout << "index_delta.hits_delta: " << index_delta.hits_delta << std::endl
+            << "index_delta.misses_delta: " << index_delta.misses_delta << std::endl
+            << "metadata_delta.hits_delta: " << metadata_delta.hits_delta << std::endl
+            << "metadata_delta.misses_delta: " << metadata_delta.misses_delta << std::endl;
 
   write_signal(observer_ready_path(args));
   wait_for_signal(writer_done_path(args));
 
+  const CacheStats stats_before_refresh = cache_stats(client);
+  print_cache_stats("observer: cache stats before refresh", stats_before_refresh);
+
   const int final_id = nearest_vector_id(client, args.table);
-  const CacheStats final_stats = cache_stats(client);
+  const CacheStats stats_after_refresh = cache_stats(client);
+  print_cache_stats("observer: cache stats after refresh", stats_after_refresh);
+
+  std::cout << "observer: cache stats delta after writer delete; checking for refresh " << std::endl;
+  auto [refresh_index_delta, refresh_metadata_delta] =
+      compute_cache_delta(stats_after_refresh, stats_before_refresh);
+
+  std::cout << "refresh_index_delta.hits_delta: " << refresh_index_delta.hits_delta << std::endl
+            << "refresh_index_delta.misses_delta: " << refresh_index_delta.misses_delta << std::endl
+            << "refresh_metadata_delta.hits_delta: " << refresh_metadata_delta.hits_delta << std::endl
+            << "refresh_metadata_delta.misses_delta: " << refresh_metadata_delta.misses_delta << std::endl;
 
   std::cout << "observer: final nearest id: " << final_id << '\n';
-  print_cache_stats("observer: after final nearest query", final_stats);
 }
 
 void run_setup(const Args& args) {
