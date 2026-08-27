@@ -1,0 +1,8 @@
+[submodule "third_party/lance"]
+	path = third_party/lance
+	url = https://github.com/9401adarsh/lance.git
+	branch = inject-cache-trace
+[submodule "third_party/lancedb-c"]
+	path = third_party/lancedb-c
+	url = https://github.com/9401adarsh/lancedb-c.git
+	branch = inject-cache-trace

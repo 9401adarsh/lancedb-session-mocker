@@ -11,6 +11,7 @@ set +a
 state_dir="$(mktemp -d /tmp/lancedb-session.XXXXXX)"
 table_name="indexed-query-$(uuidgen | tr -d '-')"
 observer_pid=""
+worker="${SESSION_MOCKER_WORKER:-./build/session-cache-worker}"
 
 cleanup() {
   if [[ -n "$observer_pid" ]] && kill -0 "$observer_pid" 2>/dev/null; then
@@ -22,13 +23,13 @@ cleanup() {
 
 trap cleanup EXIT
 
-./build/session-cache-worker \
+"$worker" \
   --role setup \
   --scenario indexed-seed \
   --uri "$LANCEDB_TEST_URI" \
   --table "$table_name"
 
-./build/session-cache-worker \
+"$worker" \
   --role observer \
   --scenario nearest-id \
   --uri "$LANCEDB_TEST_URI" \
@@ -36,7 +37,7 @@ trap cleanup EXIT
   --table "$table_name" &
 observer_pid=$!
 
-./build/session-cache-worker \
+"$worker" \
   --role writer \
   --scenario delete-nearest \
   --uri "$LANCEDB_TEST_URI" \

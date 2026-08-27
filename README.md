@@ -55,6 +55,23 @@ cmake -S . -B build \
   -Dlancedb_c_SOURCE_DIR=/path/to/lancedb-c
 ```
 
+### Cache-trace build
+
+The optional cache-trace build uses the pinned `third_party/lance` and
+`third_party/lancedb-c` submodules. Those forks add environment-gated trace
+events for manifest-metadata and IVF-partition cache lookups. Initialize the
+submodules, configure the trace build, and build it separately from the normal
+build:
+
+```sh
+git submodule update --init --recursive
+cmake -S . -B build-cache-trace -DSESSION_MOCKER_CACHE_TRACE=ON
+cmake --build build-cache-trace --parallel
+```
+
+This mode stores Cargo's registry and package cache under
+`build-cache-trace/cargo-home/`; it does not modify your normal Cargo cache.
+
 ## Run
 
 Each scenario sources `.env` and creates its own temporary coordination
@@ -66,6 +83,19 @@ directory. Run any scenario from the repository root:
 ./scripts/run_vector_delete_scenario.sh
 ./scripts/run_indexed_query_delete_scenario.sh
 ```
+
+To run the indexed-delete scenario against the cache-trace executable:
+
+```sh
+LANCE_CACHE_TRACE=1 \
+SESSION_MOCKER_WORKER="$PWD/build-cache-trace/session-cache-worker" \
+./scripts/run_indexed_query_delete_scenario.sh
+```
+
+The trace shows whether manifest metadata and IVF partitions were cache hits or
+misses. A fresh post-write result can correctly combine a new manifest-metadata
+miss with IVF-partition cache hits: deletion metadata changed, while the index
+partitions remained reusable.
 
 For the drop scenario, first provide an existing table name, for example one
 printed by the create scenario:

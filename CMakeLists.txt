@@ -4,10 +4,28 @@ project(lancedb_session_mocker LANGUAGES CXX)
 include(FetchContent)
 
 option(SESSION_MOCKER_FETCH_LANCEDB_C "Fetch the pinned lancedb-c source" ON)
+option(SESSION_MOCKER_CACHE_TRACE "Build with the traced Lance and LanceDB-C submodules" OFF)
 set(
   SESSION_MOCKER_LANCEDB_C_REV
   "daabceaeb24c07e2ada27801e18df375f2a3b01c"
   CACHE STRING "Immutable lancedb-c revision")
+
+if(SESSION_MOCKER_CACHE_TRACE)
+  if(NOT SESSION_MOCKER_FETCH_LANCEDB_C)
+    message(FATAL_ERROR "SESSION_MOCKER_CACHE_TRACE requires SESSION_MOCKER_FETCH_LANCEDB_C=ON")
+  endif()
+
+  set(SESSION_MOCKER_TRACE_LANCEDB_C_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/lancedb-c")
+  set(SESSION_MOCKER_TRACE_LANCE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/lance")
+
+  if(NOT EXISTS "${SESSION_MOCKER_TRACE_LANCEDB_C_SOURCE_DIR}/Cargo.toml" OR
+     NOT EXISTS "${SESSION_MOCKER_TRACE_LANCE_SOURCE_DIR}/rust/lance/Cargo.toml")
+    message(FATAL_ERROR "Initialize the cache-trace submodules with: git submodule update --init --recursive")
+  endif()
+
+  set(FETCHCONTENT_SOURCE_DIR_LANCEDB_C "${SESSION_MOCKER_TRACE_LANCEDB_C_SOURCE_DIR}")
+  set(SESSION_MOCKER_CARGO_ENV ${CMAKE_COMMAND} -E env "CARGO_HOME=${CMAKE_BINARY_DIR}/cargo-home")
+endif()
 
 if(SESSION_MOCKER_FETCH_LANCEDB_C)
   FetchContent_Declare(
@@ -32,7 +50,7 @@ if(SESSION_MOCKER_FETCH_LANCEDB_C)
 
   add_custom_command(
     OUTPUT "${SESSION_MOCKER_LANCEDB_LIBRARY}"
-    COMMAND cargo build ${SESSION_MOCKER_CARGO_PROFILE_ARGS} --target-dir
+    COMMAND ${SESSION_MOCKER_CARGO_ENV} cargo build ${SESSION_MOCKER_CARGO_PROFILE_ARGS} --target-dir
             "${CMAKE_BINARY_DIR}/lancedb-c-target"
     WORKING_DIRECTORY "${lancedb_c_SOURCE_DIR}"
     COMMENT "Building pinned LanceDB-C library")
