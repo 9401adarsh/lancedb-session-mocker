@@ -64,6 +64,14 @@ endif()
 find_package(Arrow REQUIRED)
 find_package(Threads REQUIRED)
 
+if(TARGET Arrow::arrow_shared)
+  set(SESSION_MOCKER_ARROW_TARGET Arrow::arrow_shared)
+elseif(TARGET arrow_shared)
+  set(SESSION_MOCKER_ARROW_TARGET arrow_shared)
+else()
+  message(FATAL_ERROR "Apache Arrow C++ must export Arrow::arrow_shared or arrow_shared")
+endif()
+
 set(
   SESSION_MOCKER_CPP_FILES
   src/main.cpp
@@ -106,7 +114,7 @@ if(SESSION_MOCKER_FETCH_LANCEDB_C)
 else()
   target_link_libraries(session-cache-worker PRIVATE lancedb)
 endif()
-target_link_libraries(session-cache-worker PRIVATE Threads::Threads Arrow::arrow_shared)
+target_link_libraries(session-cache-worker PRIVATE Threads::Threads ${SESSION_MOCKER_ARROW_TARGET})
 if(lancedb_c_SOURCE_DIR)
   target_include_directories(session-cache-worker PRIVATE "${lancedb_c_SOURCE_DIR}/include")
 endif()
